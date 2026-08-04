@@ -47,9 +47,17 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         shell: bash
         run: |
-          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $VERSION already exists. Increase release_version in parquet_database/config.json." >&2
-            exit 1
+          release=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
+            --jq ".[] | select(.tag_name == \"$VERSION\") | [.id, .draft] | @tsv" | head -n 1)
+          if [ -n "$release" ]; then
+            read -r release_id is_draft <<< "$release"
+            if [ "$is_draft" = "true" ]; then
+              echo "Removing incomplete draft release from an earlier attempt."
+              gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/$release_id"
+            else
+              echo "Release $VERSION already exists. Increase release_version in parquet_database/config.json." >&2
+              exit 1
+            fi
           fi
 
       - name: Install database builder
@@ -99,6 +107,7 @@ jobs:
             --title "OLO NSE database $VERSION" \
             --notes-file RELEASE_NOTES.md \
             --draft
+          trap 'gh release delete "$VERSION" --repo "$GITHUB_REPOSITORY" --yes >/dev/null 2>&1 || true' ERR
 
           if gh release upload "$VERSION" \
             "release/$ARCHIVE" "release/$ARCHIVE.sha256" \
@@ -111,32 +120,15 @@ jobs:
             gh release delete-asset "$VERSION" "$ARCHIVE.sha256" \
               --repo "$GITHUB_REPOSITORY" --yes >/dev/null 2>&1 || true
 
-            root="olo-testdata-nse-$VERSION"
-            daily="olo-testdata-nse-$VERSION-daily.zip"
-            minute="olo-testdata-nse-$VERSION-minute.zip"
-            common=(
-              "$root/olo-db-viewer"
-              "$root/olo-db-viewer.bat"
-              "$root/LICENSE"
-              "$root/RELEASE_NOTES.md"
-            )
-
-            (
-              cd release
-              zip -q -r -9 "$daily" "${common[@]}"
-              find "$root/database" -type f -name 'day.parquet' -print |
-                zip -q -9 "$daily" -@
-              zip -q -r -9 "$minute" "${common[@]}"
-              find "$root/database" -type f -name '1m.parquet' -print |
-                zip -q -9 "$minute" -@
-              sha256sum "$daily" "$minute" > "olo-testdata-nse-$VERSION-split.sha256"
-            )
-
-            gh release upload "$VERSION" \
-              "release/$daily" \
-              "release/$minute" \
-              "release/olo-testdata-nse-$VERSION-split.sha256" \
-              --repo "$GITHUB_REPOSITORY"
+            python parquet_database/package_split_release.py release "$VERSION"
+            mapfile -t split_assets < <(find release -maxdepth 1 -type f \
+              \( -name "olo-testdata-nse-$VERSION-daily.zip" \
+                 -o -name "olo-testdata-nse-$VERSION-minute-*.zip" \
+                 -o -name "olo-testdata-nse-$VERSION-minute.zip" \
+                 -o -name "olo-testdata-nse-$VERSION-split.sha256" \) \
+              -print | sort)
+            gh release upload "$VERSION" "${split_assets[@]}" --repo "$GITHUB_REPOSITORY"
           fi
 
           gh release edit "$VERSION" --draft=false --repo "$GITHUB_REPOSITORY"
+          trap - ERR

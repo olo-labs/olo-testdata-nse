@@ -12,4 +12,4 @@ The incremental build cache and temporary build files are not included in the co
 
 ## Split archive fallback
 
-If the release contains separate `-daily.zip` and `-minute.zip` files, extract both into the same destination folder. Both archives have the identical `olo-testdata-nse-V1.0.0` root layout, so their `database` directories merge. Then launch `olo-db-viewer.bat` from that merged root; the viewer automatically discovers both daily and minute files from the shared `database` directory.
+If the release contains a `-daily.zip` and numbered `-minute-001.zip`, `-minute-002.zip`, and subsequent files, extract all of them into the same destination folder. Every archive has the identical `olo-testdata-nse-V1.0.0` root layout, so their `database` directories merge. Then launch `olo-db-viewer.bat` from that merged root; the viewer automatically discovers both daily and minute files from the shared `database` directory.
