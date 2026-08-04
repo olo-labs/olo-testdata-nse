@@ -1,0 +1,8 @@
+/database/build.log
+/database/_temp/
+/database/_export_*/
+/database/_buckets_*/
+/database/**/*.tmp
+/database/**/*.tmp.parquet
+
+database

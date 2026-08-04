@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: "If you use this dataset, cite the repository and the exact Git commit or release used."
+title: "NSE India OHLCV and Delivery Data in Parquet"
+type: dataset
+authors:
+  - name: "OLO Labs"
+repository-code: "https://github.com/olo-labs/olo-testdata-parquet"
+url: "https://github.com/olo-labs/olo-testdata-parquet"
+license: Apache-2.0
+keywords:
+  - NSE
+  - India
+  - OHLCV
+  - delivery data
+  - delivery percentage
+  - one-minute candles
+  - Parquet
+  - DuckDB
+  - quantitative finance
+abstract: >-
+  Query-ready historical National Stock Exchange of India daily OHLCV,
+  deliverable quantity, delivery percentage, and one-minute OHLCV data,
+  organized as symbol-level Apache Parquet files.

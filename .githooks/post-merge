@@ -1,0 +1,5 @@
+#!/bin/sh
+
+# Keep branch-tracking submodules at the latest configured remote branch.
+git submodule sync --recursive || exit $?
+git submodule update --init --remote --recursive

@@ -1,0 +1,40 @@
+{
+  "@context": "https://schema.org",
+  "@type": "Dataset",
+  "name": "NSE India OHLCV and Delivery Data in Parquet",
+  "alternateName": [
+    "NSE Historical Delivery Data Parquet",
+    "Indian Stock Market OHLCV Parquet Dataset",
+    "NSE One-Minute and Daily Candle Database"
+  ],
+  "description": "Query-ready historical National Stock Exchange of India daily OHLCV, traded volume, deliverable quantity, delivery percentage, and one-minute OHLCV data organized by symbol in Parquet files.",
+  "url": "https://github.com/olo-labs/olo-testdata-parquet",
+  "identifier": "https://github.com/olo-labs/olo-testdata-parquet",
+  "keywords": [
+    "NSE historical data",
+    "NSE delivery data",
+    "NSE delivery percentage",
+    "NSE OHLCV",
+    "NSE one-minute candles",
+    "Indian stock market dataset",
+    "Parquet",
+    "DuckDB",
+    "quantitative finance"
+  ],
+  "creator": {
+    "@type": "Organization",
+    "name": "OLO Labs",
+    "url": "https://github.com/olo-labs"
+  },
+  "distribution": {
+    "@type": "DataDownload",
+    "contentUrl": "https://github.com/olo-labs/olo-testdata-parquet/releases",
+    "encodingFormat": "application/x-parquet"
+  },
+  "isBasedOn": [
+    "https://github.com/olo-labs/olo-testdata-nse-day-delivery-candle",
+    "https://github.com/olo-labs/olo-testdata-nse-min-candle"
+  ],
+  "license": "https://github.com/olo-labs/olo-testdata-parquet/blob/main/LICENSE",
+  "inLanguage": "en"
+}

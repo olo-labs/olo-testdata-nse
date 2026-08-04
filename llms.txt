@@ -1,0 +1,30 @@
+# OLO NSE Parquet dataset
+
+> Query-ready National Stock Exchange of India historical daily OHLCV, delivery quantity, delivery percentage, and one-minute OHLCV data organized by symbol in Parquet files.
+
+Canonical repository: https://github.com/olo-labs/olo-testdata-parquet
+
+## Primary documentation
+
+- [Repository overview](README.md): scope, layout, schema, build commands, and viewer.
+- [Dataset card](docs/DATASET.md): intended uses, scope, sources, limitations, and reproducibility.
+- [File structure](docs/FILE_STRUCTURE.md): exact symbol partition and filename rules.
+- [Data dictionary](docs/DATA_DICTIONARY.md): eight Parquet columns, types, nullability, and semantics.
+- [Quick start](docs/QUICKSTART.md): DuckDB, Python, pandas, Polars, and aggregation queries.
+- [OLO DB Viewer snapshot](docs/assets/olo-db-viewer-snapshot.png): current visual reference for the desktop database checker; replace in place when the UI changes.
+- [Data quality](docs/DATA_QUALITY.md): validation SQL and known limitations.
+- [FAQ](docs/FAQ.md): direct answers to common NSE dataset questions.
+- [Builder](parquet_database/README.md): incremental build, verification, releases, and adapters.
+- [Dataset metadata](metadata/dataset.jsonld): Schema.org JSON-LD.
+- [Citation metadata](CITATION.cff): repository citation details.
+- [Contribution guide](CONTRIBUTING.md): generated-data and validation conventions.
+
+## Critical facts
+
+- Consumer paths: `database/<lowercase-first-character>/<symbol>/day.parquet` and `1m.parquet`.
+- Ordered schema: `timestamp TIMESTAMP, open DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE, volume BIGINT, delivery BIGINT, del_percent DOUBLE`.
+- Daily files contain delivery quantity and delivery percentage when supplied upstream.
+- Minute files intentionally have null `delivery` and `del_percent`.
+- Row order is not guaranteed; always sort/order by `timestamp`.
+- Symbols are encoded in paths and are not repeated as a Parquet column.
+- The project is independent and is not affiliated with or endorsed by NSE; it is not investment advice.

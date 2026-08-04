@@ -1,0 +1,10 @@
+[submodule "olo-testdata-nse-min-candle"]
+	path = olo-testdata-nse-min-candle
+	url = https://github.com/olo-labs/olo-testdata-nse-min-candle.git
+	branch = main
+	ignore = dirty
+[submodule "olo-testdata-nse-day-delivery-candle"]
+	path = olo-testdata-nse-day-delivery-candle
+	url = https://github.com/olo-labs/olo-testdata-nse-day-delivery-candle.git
+	branch = main
+	ignore = dirty

@@ -1,0 +1,5 @@
+#!/bin/sh
+
+# A pull configured to rebase does not run post-merge.
+git submodule sync --recursive || exit $?
+git submodule update --init --remote --recursive
