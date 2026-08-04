@@ -1,0 +1,142 @@
+name: Manual database release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: database-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish database bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Check out repository and source data
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: parquet_database/requirements.txt
+
+      - name: Read and validate release version
+        id: version
+        shell: pwsh
+        run: |
+          $version = (Get-Content parquet_database/config.json -Raw | ConvertFrom-Json).release_version
+          if ($version -notmatch '^V[0-9]+\.[0-9]+\.[0-9]+$') {
+            throw "release_version must use the form V1.0.0; got '$version'."
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "archive=olo-testdata-nse-$version.zip" >> $env:GITHUB_OUTPUT
+
+      - name: Ensure version has not already been released
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists. Increase release_version in parquet_database/config.json." >&2
+            exit 1
+          fi
+
+      - name: Install database builder
+        run: python -m pip install --disable-pip-version-check -r parquet_database/requirements.txt
+
+      - name: Build database from source without reusing cache
+        run: python parquet_database/fast_build_database.py --profile ci --refresh
+
+      - name: Verify database
+        run: python parquet_database/fast_build_database.py --profile ci --verify-only
+
+      - name: Assemble consumer bundle
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          ARCHIVE: ${{ steps.version.outputs.archive }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="release/olo-testdata-nse-$VERSION"
+          mkdir -p "$root/database"
+
+          rsync -a database/ "$root/database/" \
+            --exclude='_cache/' \
+            --exclude='_temp/' \
+            --exclude='_buckets_*/' \
+            --exclude='_export_*/' \
+            --exclude='build.log' \
+            --exclude='*.tmp' \
+            --exclude='*.tmp.parquet'
+          cp -a olo-db-viewer "$root/olo-db-viewer"
+          cp olo-db-viewer.bat LICENSE RELEASE_NOTES.md "$root/"
+
+          (cd release && zip -q -r -9 "$ARCHIVE" "olo-testdata-nse-$VERSION")
+          sha256sum "release/$ARCHIVE" > "release/$ARCHIVE.sha256"
+
+      - name: Publish immutable GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+          ARCHIVE: ${{ steps.version.outputs.archive }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          gh release create "$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "OLO NSE database $VERSION" \
+            --notes-file RELEASE_NOTES.md \
+            --draft
+
+          if gh release upload "$VERSION" \
+            "release/$ARCHIVE" "release/$ARCHIVE.sha256" \
+            --repo "$GITHUB_REPOSITORY"; then
+            echo "Published the database as one ZIP."
+          else
+            echo "Single ZIP upload failed; creating separate daily and minute archives."
+            gh release delete-asset "$VERSION" "$ARCHIVE" \
+              --repo "$GITHUB_REPOSITORY" --yes >/dev/null 2>&1 || true
+            gh release delete-asset "$VERSION" "$ARCHIVE.sha256" \
+              --repo "$GITHUB_REPOSITORY" --yes >/dev/null 2>&1 || true
+
+            root="olo-testdata-nse-$VERSION"
+            daily="olo-testdata-nse-$VERSION-daily.zip"
+            minute="olo-testdata-nse-$VERSION-minute.zip"
+            common=(
+              "$root/olo-db-viewer"
+              "$root/olo-db-viewer.bat"
+              "$root/LICENSE"
+              "$root/RELEASE_NOTES.md"
+            )
+
+            (
+              cd release
+              zip -q -r -9 "$daily" "${common[@]}"
+              find "$root/database" -type f -name 'day.parquet' -print |
+                zip -q -9 "$daily" -@
+              zip -q -r -9 "$minute" "${common[@]}"
+              find "$root/database" -type f -name '1m.parquet' -print |
+                zip -q -9 "$minute" -@
+              sha256sum "$daily" "$minute" > "olo-testdata-nse-$VERSION-split.sha256"
+            )
+
+            gh release upload "$VERSION" \
+              "release/$daily" \
+              "release/$minute" \
+              "release/olo-testdata-nse-$VERSION-split.sha256" \
+              --repo "$GITHUB_REPOSITORY"
+          fi
+
+          gh release edit "$VERSION" --draft=false --repo "$GITHUB_REPOSITORY"

@@ -32,6 +32,10 @@ Two resource profiles are included in `config.json`:
 - `local` (default): 112 GB and 72 DuckDB threads for producing a base release on the 128 GB / 80-thread workstation. Export uses 128 hash buckets instead of one global sort so CPU and memory can work in parallel.
 - `ci`: 8 GB and 4 threads for a bounded Git-triggered incremental build.
 
+`release_version` is the version used by the manual GitHub release workflow. Update it (for example, from `V1.0.0` to `V1.0.1`), update the heading/content in `../RELEASE_NOTES.md`, commit both changes, and run **Actions > Manual database release > Run workflow**. The workflow performs a clean build, verifies it, and publishes an immutable GitHub release containing the database without its build cache, the viewer, release notes, and license.
+
+The workflow first attempts to upload a single `olo-testdata-nse-Vx.y.z.zip` together with its SHA-256 checksum. If that upload fails (for example, because it exceeds GitHub's per-asset size limit), the draft release instead receives `olo-testdata-nse-Vx.y.z-daily.zip` containing the daily database and `olo-testdata-nse-Vx.y.z-minute.zip` containing the minute database. Both fallback archives include the viewer, release notes, and license. Extract both fallback ZIPs into the same destination: their matching versioned root and `database/` paths merge, and the included viewer automatically discovers both sets of files as one database.
+
 The processing manifest is committed only after output verification, so an interrupted export is retried safely. Incremental export is timeframe-aware: changing delivery data rewrites only `day.parquet`; changing minute data rewrites only `1m.parquet`.
 
 Force a complete rebuild:
