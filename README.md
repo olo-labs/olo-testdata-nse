@@ -124,6 +124,19 @@ Validate existing outputs without rebuilding:
 
 Detailed resource profiles, cache behavior, release automation, and adapter extension instructions are in [parquet_database/README.md](parquet_database/README.md).
 
+## Automated releases
+
+The immutable versioned database release remains available through the manual
+GitHub Actions workflow. A rolling `nse-database-latest` pre-release is also
+rebuilt whenever the minute-candle repository successfully publishes an `RC:`
+commit. The rolling release uses the exact minute-candle commit carried in the
+cross-repository dispatch and publishes bounded daily/minute ZIP assets with a
+SHA-256 checksum file.
+
+Cross-repository triggering requires a `PARENT_REPO_TOKEN` Actions secret in
+`olo-testdata-nse-min-candle`. Use a fine-grained token scoped to
+`olo-labs/olo-testdata-nse` with **Contents: write** permission.
+
 ## Desktop database checker
 
 On Windows, double-click `olo-db-viewer.bat` in the repository root. OLO DB Viewer reads only this repository's `database/` folder and provides candlestick, volume, delivery, delivery-percentage, RSI, EMA, AMA, Super Trend, and anchored VWAP inspection.
