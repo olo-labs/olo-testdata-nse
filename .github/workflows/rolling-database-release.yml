@@ -40,6 +40,14 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+      - name: Update submodules to latest configured branches
+        shell: bash
+        run: |
+          set -euo pipefail
+          git submodule sync --recursive
+          git submodule update --init --remote --recursive
+          git submodule status --recursive
+
       - name: Resolve and check out released minute-data commit
         id: source
         shell: pwsh

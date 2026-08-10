@@ -135,6 +135,11 @@ commit. The rolling release uses the exact minute-candle commit carried in the
 cross-repository dispatch and publishes bounded daily/minute ZIP assets with a
 SHA-256 checksum file.
 
+Release builds update submodules to the latest commit on each configured
+tracking branch before generating the database. Both source submodules track
+`main` in `.gitmodules`; the rolling RC workflow then checks out the exact
+dispatched minute-candle commit to keep that release reproducible.
+
 Cross-repository triggering requires a `PARENT_REPO_TOKEN` Actions secret in
 `olo-testdata-nse-min-candle`. Use a fine-grained token scoped to
 `olo-labs/olo-testdata-nse` with **Contents: write** permission.
