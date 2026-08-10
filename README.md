@@ -126,8 +126,10 @@ Detailed resource profiles, cache behavior, release automation, and adapter exte
 
 ## Automated releases
 
-The immutable versioned database release remains available through the manual
-GitHub Actions workflow. A rolling `nse-database-latest` pre-release is also
+The versioned database release remains available through the manual GitHub
+Actions workflow. Its required version input accepts `V1.0.0` or `v1.0.0`;
+rerunning an existing version replaces that release's tag and assets. A rolling
+`nse-database-latest` pre-release is also
 rebuilt whenever the minute-candle repository successfully publishes an `RC:`
 commit. The rolling release uses the exact minute-candle commit carried in the
 cross-repository dispatch and publishes bounded daily/minute ZIP assets with a

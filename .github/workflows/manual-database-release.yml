@@ -2,6 +2,11 @@ name: Manual database release
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, for example V1.0.0"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -33,32 +38,16 @@ jobs:
       - name: Read and validate release version
         id: version
         shell: pwsh
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          $version = (Get-Content parquet_database/config.json -Raw | ConvertFrom-Json).release_version
-          if ($version -notmatch '^V[0-9]+\.[0-9]+\.[0-9]+$') {
-            throw "release_version must use the form V1.0.0; got '$version'."
+          $version = $env:INPUT_VERSION.Trim()
+          if ($version -notmatch '^[Vv][0-9]+\.[0-9]+\.[0-9]+$') {
+            throw "Version must use the form V1.0.0; got '$version'."
           }
+          $version = "V" + $version.Substring(1)
           "version=$version" >> $env:GITHUB_OUTPUT
           "archive=olo-testdata-nse-$version.zip" >> $env:GITHUB_OUTPUT
-
-      - name: Ensure version has not already been released
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
-        shell: bash
-        run: |
-          release=$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate \
-            --jq ".[] | select(.tag_name == \"$VERSION\") | [.id, .draft] | @tsv" | head -n 1)
-          if [ -n "$release" ]; then
-            read -r release_id is_draft <<< "$release"
-            if [ "$is_draft" = "true" ]; then
-              echo "Removing incomplete draft release from an earlier attempt."
-              gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/$release_id"
-            else
-              echo "Release $VERSION already exists. Increase release_version in parquet_database/config.json." >&2
-              exit 1
-            fi
-          fi
 
       - name: Install database builder
         run: python -m pip install --disable-pip-version-check -r parquet_database/requirements.txt
@@ -93,7 +82,7 @@ jobs:
           (cd release && zip -q -r -9 "$ARCHIVE" "olo-testdata-nse-$VERSION")
           sha256sum "release/$ARCHIVE" > "release/$ARCHIVE.sha256"
 
-      - name: Publish immutable GitHub release
+      - name: Create or replace GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
@@ -102,12 +91,43 @@ jobs:
         run: |
           set -euo pipefail
 
-          gh release create "$VERSION" \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "OLO NSE database $VERSION" \
-            --notes-file RELEASE_NOTES.md \
-            --draft
-          trap 'gh release delete "$VERSION" --repo "$GITHUB_REPOSITORY" --yes >/dev/null 2>&1 || true' ERR
+          git tag --force "$VERSION" "$GITHUB_SHA"
+          git push origin "refs/tags/$VERSION" --force
+
+          created=false
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Replacing existing release $VERSION."
+            gh release edit "$VERSION" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "OLO NSE database $VERSION" \
+              --notes-file RELEASE_NOTES.md
+
+            mapfile -t old_assets < <(
+              gh release view "$VERSION" \
+                --repo "$GITHUB_REPOSITORY" \
+                --json assets \
+                --jq '.assets[].name'
+            )
+            for asset in "${old_assets[@]}"; do
+              gh release delete-asset "$VERSION" "$asset" \
+                --repo "$GITHUB_REPOSITORY" --yes
+            done
+          else
+            gh release create "$VERSION" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "OLO NSE database $VERSION" \
+              --notes-file RELEASE_NOTES.md \
+              --draft
+            created=true
+          fi
+
+          cleanup_new_release() {
+            if [ "$created" = true ]; then
+              gh release delete "$VERSION" --repo "$GITHUB_REPOSITORY" \
+                --yes >/dev/null 2>&1 || true
+            fi
+          }
+          trap cleanup_new_release ERR
 
           if gh release upload "$VERSION" \
             "release/$ARCHIVE" "release/$ARCHIVE.sha256" \
