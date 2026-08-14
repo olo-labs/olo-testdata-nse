@@ -5,4 +5,6 @@
 /database/**/*.tmp
 /database/**/*.tmp.parquet
 
-database
+/database/*
+!/database/.gitignore
+!/database/.gitkeep
