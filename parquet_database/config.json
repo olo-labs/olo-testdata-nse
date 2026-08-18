@@ -1,6 +1,7 @@
 {
   "database_dir": "../database",
   "day_source": "../olo-testdata-nse-day-delivery-candle/Day_Delivery/NSE",
+  "day_index_source": "../olo-testdata-nse-day-index-candle/Day_Index/NSE",
   "minute_source": "../olo-testdata-nse-min-candle/Minute/NSE",
   "minute_index_source": "../olo-testdata-nse-min-candle/Minute/NSE_IDX",
   "compression": "zstd",

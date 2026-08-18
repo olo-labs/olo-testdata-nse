@@ -49,7 +49,7 @@ def arguments() -> argparse.Namespace:
 def configuration(path: Path, profile: str) -> dict:
     path = path.resolve()
     result = json.loads(path.read_text(encoding="utf-8"))
-    for key in ("database_dir", "day_source", "minute_source", "minute_index_source"):
+    for key in ("database_dir", "day_source", "day_index_source", "minute_source", "minute_index_source"):
         if key not in result:
             continue
         value = Path(result[key])
@@ -122,6 +122,33 @@ def copy_day_csv(connection, source: Path, output: Path, compression: str) -> No
     finally:
         if temporary:
             temporary.cleanup()
+
+
+def copy_day_index_csv(connection, source: Path, output: Path, compression: str) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    temp_output = output.with_suffix(".tmp.parquet")
+    connection.execute(
+        f"""
+        COPY (
+            SELECT
+                'day'::VARCHAR timeframe,
+                upper(trim(index_name))::VARCHAR symbol,
+                CAST(try_strptime(trim(index_date), ['%d-%m-%Y', '%d-%b-%Y', '%d/%m/%Y']) AS TIMESTAMP) AS "timestamp",
+                coalesce(try_cast(open_index_value AS DOUBLE), try_cast(closing_index_value AS DOUBLE)) AS open,
+                coalesce(try_cast(high_index_value AS DOUBLE), try_cast(closing_index_value AS DOUBLE)) AS high,
+                coalesce(try_cast(low_index_value AS DOUBLE), try_cast(closing_index_value AS DOUBLE)) AS low,
+                try_cast(closing_index_value AS DOUBLE) AS close,
+                try_cast(replace(volume, ',', '') AS BIGINT) AS volume,
+                NULL::BIGINT AS delivery,
+                NULL::DOUBLE AS del_percent
+            FROM read_csv('{sql_path(source)}', header=true, all_varchar=true, normalize_names=true)
+            WHERE trim(index_name)<>''
+              AND try_strptime(trim(index_date), ['%d-%m-%Y', '%d-%b-%Y', '%d/%m/%Y']) IS NOT NULL
+              AND try_cast(closing_index_value AS DOUBLE) IS NOT NULL
+        ) TO '{sql_path(temp_output)}' (FORMAT PARQUET, COMPRESSION {compression.upper()})
+        """
+    )
+    os.replace(temp_output, output)
 
 
 def copy_minute_zip(connection, source: Path, output: Path, universe_file: Path | None,
@@ -310,10 +337,12 @@ def main() -> int:
         return 0
 
     day_sources = sorted(config["day_source"].glob("delivery_*.csv"))
+    day_index_sources = sorted(config.get("day_index_source", Path()).glob("ind_close_all_*.csv")) if config.get("day_index_source") else []
     minute_sources = sorted(config["minute_source"].glob("*.zip"))
     minute_index_sources = sorted(config.get("minute_index_source", Path()).glob("*.zip")) if config.get("minute_index_source") else []
     progress.write(0, f"Profile={config['profile']}; DuckDB memory={config['memory_limit']}; "
-                      f"threads={config['threads']}; discovered {len(day_sources):,} day CSVs and "
+                      f"threads={config['threads']}; discovered {len(day_sources):,} equity day CSVs, "
+                      f"{len(day_index_sources):,} index day CSVs and "
                       f"{len(minute_sources):,} equity minute ZIPs and "
                       f"{len(minute_index_sources):,} index minute ZIPs")
     changed = False
@@ -345,6 +374,23 @@ def main() -> int:
     universe_hash = create_universe(connection, day_cache, universe_file, config["compression"])
     universe_changed = universe_hash != old_universe
     manifest["universe"] = universe_hash
+
+    for index, source in enumerate(day_index_sources, 1):
+        key = "day_idx:" + source.name
+        live_keys.add(key)
+        cache_rel = cache_name("day_idx", source)
+        cache = database / "_cache" / cache_rel
+        stamp = fingerprint(source, 2)
+        record = manifest["sources"].get(key, {})
+        if record.get("fingerprint") != stamp or not cache.exists():
+            copy_day_index_csv(connection, source, cache, config["compression"])
+            manifest["sources"][key] = {"fingerprint": stamp, "cache": cache_rel}
+            changed = True
+            dirty_timeframes.add("day")
+            action = "processed"
+        else:
+            action = "cached"
+        progress.write(20 + 5 * index / max(1, len(day_index_sources)), f"Index day {index:,}/{len(day_index_sources):,} {action}: {source.name}")
 
     minute_inputs = (
         [("minute", source, universe_file, r"(\.NC)?\.NSE$", 3) for source in minute_sources]
@@ -378,7 +424,7 @@ def main() -> int:
             if cached.exists(): cached.unlink()
             del manifest["sources"][key]
             changed = True
-            dirty_timeframes.add("day" if key.startswith("day:") else "1m")
+            dirty_timeframes.add("day" if key.startswith(("day:", "day_idx:")) else "1m")
     cache_files = [database / "_cache" / row["cache"] for row in manifest["sources"].values()]
     output_exists = any(
         path.parents[1].name != "_cache" for path in database.glob("*/*/*.parquet")

@@ -21,12 +21,15 @@ class EndToEndTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=PROJECT_ROOT) as temporary:
             root = Path(temporary)
             day = root / "input" / "day"
+            day_index = root / "input" / "day_index"
             minute = root / "input" / "minute"
             output = root / "database"
             day.mkdir(parents=True)
+            day_index.mkdir(parents=True)
             minute.mkdir(parents=True)
             daily_file = day / "delivery_01-Jan-2025.csv"
             self.write_day(daily_file, close="105")
+            self.write_day_index(day_index / "ind_close_all_01012025.csv")
             self.write_minute(minute / "01012025.zip")
             config = root / "config.json"
             config.write_text(
@@ -34,6 +37,7 @@ class EndToEndTest(unittest.TestCase):
                     {
                         "database_dir": str(output),
                         "day_source": str(day),
+                        "day_index_source": str(day_index),
                         "minute_source": str(minute),
                         "compression": "zstd",
                     }
@@ -42,15 +46,18 @@ class EndToEndTest(unittest.TestCase):
             )
 
             first = self.run_builder(config)
-            self.assertIn("Verified 2 output files", first.stdout)
+            self.assertIn("Verified 3 output files", first.stdout)
             day_parquet = output / "a" / "ABC" / "day.parquet"
             minute_parquet = output / "a" / "ABC" / "1m.parquet"
             self.assertTrue(day_parquet.is_file())
             self.assertTrue(minute_parquet.is_file())
+            index_parquet = output / "n" / "NIFTY%2050" / "day.parquet"
+            self.assertTrue(index_parquet.is_file())
             connection = duckdb.connect()
             self.assertEqual(connection.execute("SELECT close FROM read_parquet(?)", [str(day_parquet)]).fetchone()[0], 105)
             self.assertEqual(connection.execute("SELECT delivery FROM read_parquet(?)", [str(day_parquet)]).fetchone()[0], 500)
             self.assertIsNone(connection.execute("SELECT delivery FROM read_parquet(?)", [str(minute_parquet)]).fetchone()[0])
+            self.assertEqual(connection.execute("SELECT close FROM read_parquet(?)", [str(index_parquet)]).fetchone()[0], 24000)
 
             second = self.run_builder(config)
             self.assertIn("No source changes", second.stdout)
@@ -77,6 +84,10 @@ class EndToEndTest(unittest.TestCase):
         csv_text = "Ticker,Date,Time,Open,High,Low,Close,Volume,Open Interest\nABC.NC.NSE,01/01/2025,09:15:59,100,101,99,100.5,10,0\nBOND1.NC.NSE,01/01/2025,09:15:59,1,1,1,1,1,0\n"
         with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as archive:
             archive.writestr("minute.csv", csv_text)
+
+    @staticmethod
+    def write_day_index(path: Path) -> None:
+        path.write_text("Index Name,Index Date,Open Index Value,High Index Value,Low Index Value,Closing Index Value,Points Change,Change(%),Volume,Turnover (Rs. Cr.),P/E,P/B,Div Yield\nNifty 50,01-01-2025,23900,24100,23800,24000,100,0.42,1000000,1000,22,4,1.2\n", encoding="utf-8")
 
     @staticmethod
     def run_builder(config: Path, *arguments: str) -> subprocess.CompletedProcess:
